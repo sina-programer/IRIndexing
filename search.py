@@ -1,4 +1,3 @@
-from itertools import product
 from functools import partial
 import operator
 
@@ -79,4 +78,4 @@ def search(index, documents: dict['doc-id', 'doc'], query, n=10):
     score_function = partial(score.score, list(documents.values()), query=query)
     related_docs = list(get_related_docs(documents, query))  # (doc-id, doc)
     related_docs.sort(key=lambda x: score_function(x[1]), reverse=True)
-    return list(map(operator.indexgetter(0), related_docs[:n]))
+    return list(map(operator.itemgetter(0), related_docs[:n]))
