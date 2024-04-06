@@ -32,7 +32,7 @@ def get_related_docs(documents, terms):
         if is_doc_related(doc, terms):
                 yield doc_id, doc
 
-def get_position_of_exact_terms(query):
+def get_position_of_quotes(query):
     start_idx, stop_idx = None, None
     for idx, term in enumerate(query):
         if not start_idx and term.startswith('"'):
@@ -44,33 +44,37 @@ def get_position_of_exact_terms(query):
             yield start_idx, stop_idx
             start_idx, stop_idx = None, None
 
-def format_query(index, query, wildcard=True, quote=True):
+def handle_wildcard(index, query, replace=True):
     terms = query.copy()
-
-    # handle wildcards
     for idx, term in enumerate(query):
         if term.startswith('*'):
             term = term.removeprefix('*')
             terms[idx] = term
-            if wildcard:
-                terms.extend(index.find_related_terms(term))
+            if replace:
+                terms.extend(index.get_related_terms(term))
+    return terms
 
-    # handle quotations
-    count = 0
-    for start_idx, stop_idx in get_position_of_exact_terms(query):
-        if quote:
+def handle_quote(query, replace=True):
+    terms = query.copy()
+    _count = 0
+    for start_idx, stop_idx in get_position_of_quotes(query):
+        if replace:
             for _ in range(start_idx, stop_idx+1):
-                terms.pop(start_idx - count)
+                terms.pop(start_idx - _count)
             sublist = query[start_idx:stop_idx+1]
             sublist[0] = sublist[0].removeprefix('"')
             sublist[-1] = sublist[-1].removesuffix('"')
-            terms.insert(start_idx-count, sublist)
-            count += stop_idx - start_idx
-
+            terms.insert(start_idx-_count, sublist)
+            _count += stop_idx - start_idx
         else:
             terms[stop_idx] = terms[stop_idx].removesuffix('"')
             terms[start_idx] = terms[start_idx].removeprefix('"')
+    return terms
 
+def format_query(index, query, wildcard=True, quote=True):
+    terms = query.copy()
+    terms = handle_wildcard(index, terms, replace=wildcard)
+    terms = handle_quote(terms, replace=quote)
     return terms
 
 def search(index, documents: dict['doc-id', 'doc'], query, n=10):
