@@ -152,6 +152,29 @@ class Posting(Index, ABC):
         return self[term]
 
 
+class Graph(Index, ABC):
+    def _get_term(self, term):
+        node = self.data
+        for char in term:
+            if char not in node:
+                return
+            node = node[char]
+        return node
+
+    def remove_key(self, key, node=None):
+        if node is None:
+            node = self.data
+
+        if isinstance(node, dict):
+            for item in Graph._get_doc_ids(node):
+                if item == key:
+                    del node[key]
+            for value in node.values():
+                self.remove_key(key, node=value)
+
+    @classmethod
+    def _get_doc_ids(cls, dic):
+        return list(filter(lambda x: isinstance(x, int), dic.keys()))
 
 
 
@@ -191,6 +214,33 @@ class PositionalPosting(Posting):
         for term_ids in self.get_term(term).values():
             count += len(term_ids)
         return count
+
+
+class PositionalGraph(Graph):
+    is_positional = True
+
+    def _add_document(self, document, doc_id):
+        for term_id, term in enumerate(document):
+            node = self.data
+            for char in term:
+                node.setdefault(char, dict())
+                node = node[char]
+            node.setdefault(doc_id, list())
+            node[doc_id].append(term_id)
+
+    def _remove_document(self, doc_id):
+        self.remove_key(doc_id)
+
+    def count_term(self, term):
+        node = self.data
+        for char in term:
+            if char not in node:
+                break
+            node = node[char]
+        else:
+            return sum(map(len, map(lambda x: node[x], self._get_doc_ids(node))))
+        return -1
+
 
 
 def splitter(path):
