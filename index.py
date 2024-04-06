@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import UserDict
 import json
+import os
 
 import search
 import score
@@ -10,27 +11,68 @@ class Index(UserDict, ABC):
     def __init__(self):
         super().__init__()
 
-        self._doc_counter = 1
-        self.documents = {}
         self.terms = set()
+        self.documents = {}
+        self._doc_counter = 0
+
+    @property
+    def docs(self): return list(self.documents.values())
+
+    @property
+    def doc_ids(self): return list(self.documents.keys())
+
+    @property
+    @abstractmethod
+    def is_positional(self): return
+
+    @abstractmethod
+    def count_term(self, term): return  # returns the frequency of the 'term'
+
+    @abstractmethod
+    def _add_document(self, terms, doc_id): pass  # add a doc considering the dictinoary structure
+
+    @abstractmethod
+    def _remove_document(self, doc_id): pass
+
+    @abstractmethod
+    def _get_term(self, term): return
+
+    @classmethod
+    def view_positional(cls, result, term=None):
+        print(cls.__name__ + f" ({term})" if term else '')
+        print("Doc-ID  | [Term-IDs]")
+        for doc_id, term_ids in result.items():
+            print(format(doc_id, '<7'), term_ids, sep=' | ')
+        print()
+
+    @classmethod
+    def view_nonpositional(cls, result, term=None):
+        print(cls.__name__ + f" ({term})" if term else '')
+        print('Doc-IDs:', result)
+        print()
+
+    def view_term(self, term):
+        if self.is_positional:
+            self.view_positional(self.get_term(term), term=term)
+        else:
+            self.view_nonpositional(self.get_term(term), term=term)
 
     def get_term(self, term):
-        if term not in self.terms:
+        if not self.validate_term(term):
             raise IndexError(f'Term <{term}> does not exists!')
-        return self[term]
+        return self._get_term(term)
 
-    def find_related_terms(self, term):
-        return list(filter(lambda t: (term in t) and (term != t), self.terms))
-
-    def add_document(self, doc, doc_id=None):
+    def add_document(self, document, doc_id=None):
         if doc_id is None:
-            doc_id = self._doc_counter
             self._doc_counter += 1
-        elif doc_id in self.doc_ids:
+            doc_id = self._doc_counter
+        if self.validate_document(doc_id):
             raise IndexError(f'Doc-ID <{doc_id}> already exists!')
 
-        self.documents[doc_id] = doc
-        self._add_document(doc, doc_id)
+        for term in document:
+            self.terms.add(term)
+        self.documents[doc_id] = document
+        self._add_document(document, doc_id)
         return doc_id
 
     def add_documents(self, docs):
@@ -38,31 +80,49 @@ class Index(UserDict, ABC):
             self.add_document(doc)
 
     def remove_document(self, doc_id):
-        if doc_id not in self.doc_ids:
+        if not self.validate_document(doc_id):
             raise ValueError(f'Doc-ID <{doc_id}> does not exists!')
 
-        self.documents.pop(doc_id)
+        for term in self.documents.pop(doc_id):
+            if self.count_term(term) == 0:
+                self.terms.remove(term)
         self._remove_document(doc_id)
 
     def remove_documents(self, doc_ids):
         for doc_id in doc_ids:
             self.remove_document(doc_id)
 
+    def fetch_document(self, doc_id):
+        if not self.validate_document(doc_id):
+            raise IndexError(f'Doc-ID <{doc_id}> does not exists!')
+        return self.documents[doc_id]
+
+    def validate_document(self, doc_id):
+        return doc_id in self.documents
+
+    def validate_term(self, term):
+        return term in self.terms
+
     def validate_terms(self, terms):
         for term in terms:
             if isinstance(term, list):
                 yield list(self.validate_terms(term))
-            elif term in self.terms:
+            elif self.validate_term(term):
                 yield term
 
-    def save(self, filepath, indent=4):
+    def save(self, filepath=None, overwrite=True, indent=4):
+        if filepath is None:
+            filepath = type(self).__name__ + '.json'
+        if not overwrite and os.path.exists(filepath):
+            counter = 2
+            filedir, basename, ext = splitter(filepath)
+            while os.path.exists(filepath := os.path.join(filedir, basename+f' ({counter})'+ext)):
+                counter += 1
         with open(filepath, 'w') as handler:
             return json.dump(self.data, handler, indent=indent)
 
-    def fetch_id(self, doc_id):
-        if doc_id not in self.doc_ids:
-            raise IndexError(f'Doc-ID <{doc_id}> does not exists!')
-        return self.documents[doc_id]
+    def get_related_terms(self, term, itself=False):
+        return list(filter(lambda t: (term in t) and (True if itself else term != t), self.terms))
 
     def format_query(self, query, wildcard=True, quote=True):
         return search.format_query(self, query, wildcard=wildcard, quote=quote)
@@ -82,78 +142,61 @@ class Index(UserDict, ABC):
     def steps_matrix(self, document, query):
         return score.steps_matrix(self.docs, document, query)
 
-    @property
-    def docs(self): return list(self.documents.values())
-
-    @property
-    def doc_ids(self): return list(self.documents.keys())
-
-    @abstractmethod
-    def view_term(self, term): return
-
-    @abstractmethod
-    def count_term(self, term): return
-
-    @abstractmethod
-    def _add_document(self, terms, doc_id): pass
-
-    @abstractmethod
-    def _remove_document(self, doc_id): pass
-
     def __setitem__(self, key, value):
         self.data[key] = value
 
 
-class NonPositionalIndex(Index):
+
+class Posting(Index, ABC):
+    def _get_term(self, term):
+        return self[term]
+
+
+
+
+
+class NonPositionalPosting(Posting):
+    is_positional = False
+
     def _add_document(self, terms, doc_id):
         for term in terms:
-            if term not in self.terms:
-                self.terms.add(term)
-                self[term] = []
+            self.setdefault(term, list())
             self[term].append(doc_id)
 
     def _remove_document(self, doc_id):
-        for doc_ids in self.values():
+        for term, doc_ids in self.items():
             if doc_id in doc_ids:
-                doc_ids.remove(doc_id)
+                self[term].remove(doc_id)
 
     def count_term(self, term):
         return len(self.get_term(term))
 
-    def view_term(self, term):
-        print(f"Non-Positional Index ({term})")
-        print('Doc-IDs:', self.get_term(term))
-        print()
 
+class PositionalPosting(Posting):
+    is_positional = True
 
-class PositionalIndex(Index):
     def _add_document(self, terms, doc_id):
         for term_id, term in enumerate(terms):
-            if term not in self.terms:
-                self.terms.add(term)
-                self[term] = {}
-            if doc_id not in self[term]:
-                self[term][doc_id] = [term_id]
-            else:
-                self[term][doc_id].append(term_id)
+            self.setdefault(term, dict())
+            self[term].setdefault(doc_id, list())
+            self[term][doc_id].append(term_id)
 
     def _remove_document(self, doc_id):
-        for result in self.values():
+        for term, result in self.items():
             if doc_id in result:
-                result.pop(doc_id)
+                self[term].pop(doc_id)
 
     def count_term(self, term):
-        c = 0
+        count = 0
         for term_ids in self.get_term(term).values():
-            c += len(term_ids)
-        return c
+            count += len(term_ids)
+        return count
 
-    def view_term(self, term):
-        result = self.get_term(term)
-        print(f"Positional Index ({term})")
-        print("Doc-ID | [Term-IDs]")
-        for doc_id, term_ids in result.items():
-            print(doc_id, term_ids, sep=' | ')
+
+def splitter(path):
+    filedir, filename = os.path.split(path)
+    basename, extension = os.path.splitext(filename)
+    return filedir, basename, extension
 
 
 if __name__ == '__main__':
