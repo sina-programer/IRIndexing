@@ -83,3 +83,11 @@ def search(index, documents: dict['doc-id', 'doc'], query, n=10):
     related_docs = list(get_related_docs(documents, query))  # (doc-id, doc)
     related_docs.sort(key=lambda x: score_function(x[1]), reverse=True)
     return list(map(operator.itemgetter(0), related_docs[:n]))
+
+
+if __name__ == "__main__":
+    query = ['hello', '"sir', 'ken"', 'when', '"today', 'show"', 'starts']
+    print('Query:', query)
+    print('Quote Positions:', list(get_position_of_quotes(query)))
+    print('Quote Formatted:', handle_quote(query))
+    print('Quote Formatted (replace=False):', handle_quote(query, replace=False))
