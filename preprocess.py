@@ -41,7 +41,7 @@ def tokenize(sentence):
     return tokenizer.tokenize(sentence)
 
 def is_stopword(token):
-    return (token not in STOPWORDS) and (token not in string.punctuation)
+    return (token in STOPWORDS) or (token in string.punctuation)
 
 def _stem(token):
     return stemmer.stem(token)
@@ -61,9 +61,22 @@ def lemmatize(tokens):
     combination = list(zip(tokens, tags))
     return list(map(lambda x: lemmatizer.lemmatize(*x), combination))
 
+def preprocess(query, stemming=True, stopword=True):
+    tokens = []
+    for token in query:
+        if stopword and is_stopword(token):
+            continue
+        elif isinstance(token, (list, tuple, set)):
+            tokens.append(preprocess(token))
+        else:
+            tokens.append(token.lower())
+
+    if stemming:
+        tokens = stem(tokens)
+    return tokens
+
 def preprocess_sentence(string, return_token=False, delimiter=' '):
-    tokens = tokenize(string)
-    tokens = stem(list(filter(is_stopword, tokens)))
+    tokens = preprocess(tokenize(string))
     if return_token:
         return tokens
     return delimiter.join(tokens)
