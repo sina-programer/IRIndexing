@@ -74,3 +74,20 @@ def steps_matrix(docs, document, query):
     matrix.columns = pd.MultiIndex.from_product([['Query', 'Document'], ['tf', 'tf-wt', 'df', 'idf', 'wt', 'nz']])
     matrix['prod'] = matrix['Query', 'nz'] * matrix['Document', 'nz']
     return matrix
+
+
+if __name__ == "__main__":
+    documents = [
+        ['hello', 'dear', 'how', 'are', 'you', 'today'],
+        ['hello', 'sir', 'here', 'is', 'the', 'plan'],
+        ['what', 'the', 'hell', 'are', 'you', 'pointing', 'to'],
+        ['i', 'am', 'interested', 'in', 'what', 'hell', 'and', 'heaven', 'are']
+    ]
+
+    document = documents[-1]
+    query = ['today', 'is', 'what', 'you', 'interested']
+
+    print('Document:', document)
+    print('Query:', query)
+    print('\nSteps Matrix')
+    print(steps_matrix(documents, document, query))
