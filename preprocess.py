@@ -61,10 +61,10 @@ def preprocess(query, stemming=True, stopword=True, lower=True, strip=True, punc
     translator = str.maketrans(dict(zip(string.punctuation, ['']*len(string.punctuation))))
     tokens = []
     for token in query:
-        if stopword and is_stopword(token):
+        if isinstance(token, (list, tuple, set)):
+            tokens.append(preprocess(token, stemming=stemming, stopword=stopword, lower=lower, strip=strip, puncs=puncs))
             continue
-        elif isinstance(token, (list, tuple, set)):
-            tokens.append(preprocess(token))
+        elif stopword and is_stopword(token):
             continue
 
         if lower:
@@ -79,8 +79,8 @@ def preprocess(query, stemming=True, stopword=True, lower=True, strip=True, punc
 
     return tokens
 
-def preprocess_sentence(string, return_token=False, delimiter=' '):
-    tokens = preprocess(tokenize(string))
+def preprocess_sentence(string, return_token=False, delimiter=' ', **kwargs):
+    tokens = preprocess(tokenize(string), **kwargs)
     if return_token:
         return tokens
     return delimiter.join(tokens)
@@ -88,6 +88,11 @@ def preprocess_sentence(string, return_token=False, delimiter=' '):
 def unique_tokens(tokens):
     used_tokens = set()
     for token in tokens:
+        if isinstance(token, list):
+            for t in unique_tokens(token):
+                if t not in used_tokens:
+                    yield t
+                    used_tokens.add(t)
         if token not in used_tokens:
             yield token
             used_tokens.add(token)
