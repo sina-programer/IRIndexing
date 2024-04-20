@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import UserDict
 import json
+import time
 import os
 
 import search
@@ -38,11 +39,36 @@ class Index(UserDict, ABC):
     def _get_term(self, term): return
 
     @classmethod
+    def _dump(cls, filepath, dictionary, overwrite=True, backup=False, indent=4):
+        if not overwrite and os.path.exists(filepath):
+            counter = 2
+            filedir, basename, ext = splitter(filepath)
+            while os.path.exists(filepath := os.path.join(filedir, basename+f' ({counter})'+ext)):
+                counter += 1
+
+        with open(filepath, 'w') as handler:
+            json.dump(dictionary, handler, indent=indent)
+
+        if backup:
+            filedir, basename, ext = splitter(filepath)
+            cls._dump(
+                os.path.join(
+                    filedir,
+                    basename + '.bac' + str(int(time.time())) + ext
+                ),
+                dictionary,
+                overwrite=True,
+                backup=False,
+                indent=4
+            )
+
+    @classmethod
     def view_positional(cls, result, term=None):
         print(cls.__name__ + f" ({term})" if term else '')
         print("Doc-ID  | [Term-IDs]")
         for doc_id, term_ids in result.items():
-            print(format(doc_id, '<7'), term_ids, sep=' | ')
+            if isinstance(term_ids, list):
+                print(format(doc_id, '<7'), term_ids, sep=' | ')
         print()
 
     @classmethod
@@ -110,25 +136,19 @@ class Index(UserDict, ABC):
             elif self.validate_term(term):
                 yield term
 
-    def save(self, filepath=None, overwrite=True, indent=4):
+    def dump(self, filepath=None, **kwargs):
         if filepath is None:
             filepath = type(self).__name__ + '.json'
-        if not overwrite and os.path.exists(filepath):
-            counter = 2
-            filedir, basename, ext = splitter(filepath)
-            while os.path.exists(filepath := os.path.join(filedir, basename+f' ({counter})'+ext)):
-                counter += 1
-        with open(filepath, 'w') as handler:
-            return json.dump(self.data, handler, indent=indent)
+        Index._dump(filepath, self.data, **kwargs)
 
     def get_related_terms(self, term, itself=False):
         return list(filter(lambda t: (term in t) and (True if itself else term != t), self.terms))
 
     def format_query(self, query, wildcard=True, quote=True):
-        return search.format_query(self, query, wildcard=wildcard, quote=quote)
+        return search.format_query(query, index=self, wildcard=wildcard, quote=quote)
 
-    def search(self, query, n=10):
-        return search.search(self, self.documents, query, n=n)
+    def search(self, query):
+        return search.search(self, self.documents, query)
 
     def score(self, document, query):
         return score.score(self.docs, document, query)
