@@ -57,7 +57,8 @@ def lemmatize(tokens):
     tags = list(map(lambda x: POS_TAGS.get(x, 'n'), tags))
     return list(map(lambda x: lemmatizer.lemmatize(*x), zip(tokens, tags)))
 
-def preprocess(query, stemming=True, stopword=True, lower=True):
+def preprocess(query, stemming=True, stopword=True, lower=True, strip=True, puncs=True):
+    translator = str.maketrans(dict(zip(string.punctuation, ['']*len(string.punctuation))))
     tokens = []
     for token in query:
         if stopword and is_stopword(token):
@@ -68,6 +69,10 @@ def preprocess(query, stemming=True, stopword=True, lower=True):
 
         if lower:
             token = token.lower()
+        if puncs:
+            token = token.translate(translator)
+        if strip:
+            token = token.strip()
         if stemming:
             token = _stem(token)
         tokens.append(token)
@@ -94,6 +99,11 @@ stemmer = PorterStemmer()
 
 
 if __name__ == "__main__":
+    doc = ['Hello', 'sir ', 'reading!']
+    print('Document:', doc)
+    print('Preprocessed:', preprocess(doc))
+    print()
+
     print('Benchmark stemming vs lemmatizing')
     print('Loading Data...')
     df = pd.read_csv('ted_talks.csv')
