@@ -1,6 +1,7 @@
 from functools import partial
 import operator
 
+import preprocess
 import score
 
 
@@ -18,21 +19,20 @@ def has_subset(array, subarray):
 
 
 def is_doc_related(document, terms):
-    compound_terms = list(filter(lambda x: isinstance(x, list), terms))  # terms inside a quotation
-    if compound_terms:
-        for cterm in compound_terms:
-            if not has_subset(terms, cterm):
+    quotes = list(filter(lambda x: isinstance(x, list), terms))
+    if quotes:
+        for quote in quotes:
+            if not has_subset(document, quote):
                 return False
         return True
 
-    simple_terms = list(filter(lambda x: x not in compound_terms, terms))
-    return any(term in document for term in simple_terms)
+    return any(term in document for term in list(filter(lambda x: isinstance(x, str), terms)))
 
 
 def get_related_docs(documents, terms):
     for doc_id, doc in documents.items():
         if is_doc_related(doc, terms):
-                yield doc_id, doc
+            yield doc_id, doc
 
 
 def get_position_of_quotes(query):
@@ -79,6 +79,16 @@ def handle_quote(query, replace=True):
     return terms
 
 
+def flatten(array):
+    flat = []
+    for item in array:
+        if isinstance(item, (list, tuple, set)):
+            flat.extend(flatten(item))
+        else:
+            flat.append(item)
+    return flat
+
+
 def format_query(query, index=None, wildcard=True, quote=True):
     terms = query.copy()
     terms = handle_wildcard(terms, index=index, replace=wildcard)
@@ -86,12 +96,27 @@ def format_query(query, index=None, wildcard=True, quote=True):
     return terms
 
 
-def search(documents: dict['doc-id', 'doc'], query, index=None, n=10):
+def _search(documents: dict['doc-id', 'doc'], query) -> dict['doc_id', 'doc_score']:
+    score_function = partial(score.score, list(documents.values()), query=flatten(query))
+    return dict(
+        sorted(
+            list(
+                map(
+                    lambda x: (x[0], score_function(x[1])),
+                    list(get_related_docs(documents, query))  # (doc-id, doc)
+                )
+            ),
+            key=operator.itemgetter(-1),
+            reverse=True
+        )
+    )
+
+
+def search(index, documents, query):
     query = format_query(query, index=index)
-    score_function = partial(score.score, list(documents.values()), query=query)
-    related_docs = list(get_related_docs(documents, query))  # (doc-id, doc)
-    related_docs.sort(key=lambda x: score_function(x[1]), reverse=True)
-    return list(map(operator.itemgetter(0), related_docs[:n]))
+    query = preprocess.preprocess(query)
+    query = list(index.validate_terms(query))
+    return _search(documents, query)
 
 
 
