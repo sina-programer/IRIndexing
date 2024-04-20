@@ -2,14 +2,11 @@ from nltk.stem import PorterStemmer, WordNetLemmatizer
 from nltk.tokenize import TweetTokenizer
 from nltk.corpus import stopwords
 from nltk import pos_tag
-import seaborn as sns
 import pandas as pd
 import numpy as np
 import string
 import time
 
-
-sns.set_theme()
 
 STOPWORDS = stopwords.words('english')
 POS_TAGS = {
@@ -58,21 +55,23 @@ def lemmatize(tokens):
     tags = pos_tag(tokens)
     tags = list(map(lambda x: x[-1].lower(), tags))
     tags = list(map(lambda x: POS_TAGS.get(x, 'n'), tags))
-    combination = list(zip(tokens, tags))
-    return list(map(lambda x: lemmatizer.lemmatize(*x), combination))
+    return list(map(lambda x: lemmatizer.lemmatize(*x), zip(tokens, tags)))
 
-def preprocess(query, stemming=True, stopword=True):
+def preprocess(query, stemming=True, stopword=True, lower=True):
     tokens = []
     for token in query:
         if stopword and is_stopword(token):
             continue
         elif isinstance(token, (list, tuple, set)):
             tokens.append(preprocess(token))
-        else:
-            tokens.append(token.lower())
+            continue
 
-    if stemming:
-        tokens = stem(tokens)
+        if lower:
+            token = token.lower()
+        if stemming:
+            token = _stem(token)
+        tokens.append(token)
+
     return tokens
 
 def preprocess_sentence(string, return_token=False, delimiter=' '):
